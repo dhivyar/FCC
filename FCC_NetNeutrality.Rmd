@@ -1,0 +1,88 @@
+---
+title: "FCC_NetNeutrality"
+author: "Dhivya R"
+date: "April 25, 2018"
+output: html_document
+---
+# FCC Net Neutrality Repeal ::  Comments Scoring Project
+
+## Context:
+
+The Federal Communications Commission ran a public docket where Americans can enter their thoughts and comments on the proposal to repeal the Net Neutrality Policy. Net Neutrality is the principle that Governments should mandate ISPs to treat all data on the internet to be the same and not discriminate against specific websites and certain content by charging money and slowing down.
+
+The Wall Street Journal ran an article in December 2017 where it stated many comments submitted in the platform were fraudulent as PII information from many Americans were stolen and used to enter fake comments by spam bots and programs.
+
+The WSJ and few other investigative journalists and attorneys conducted independent surveys for a random population of the dataset to check if the people had actually submitted the comments. And more than 88% of people responded in the negative.
+
+## Data Set:
+
+The dataset is available from the FCC website Docket 17-108. The entire dataset is available as 3 zip files. The entire dataset is > 3 GB big. A sample of 500,000 comments in 298 MB is used for the exploratory analyses. 
+
+## Problem Statement:
+
+There is an inherent need to understand if the following situations could have happened:
+
+1. IDs of Americans were stolen by bots to input false/ fraudulent comments
+2. Bots compromised the democratic process of FCC policy making through fake comments
+3. Empower Americans by building a repository of IDs harvested without permission for fake opinions 
+
+Surveys are the only sure shot of knowing for sure if the above two scenarios occured, but surveys are expensive and are not practical to study the entire population as emails might not guarantee a response, might not be valid or might bounce. The solution is to employ Machine Learning and NLP techniques to score each comment basis its probability of being a fake. These scores can be employed to answer the above questions probabilistically. Though independent studies have analyzed the datasets, none have employed Machine Learning techniques to score the comments.
+
+## Exploratory Analyses:
+
+The sample dataset contains 500k comments and the the following columns: id, submitted_time, comments, email domain and ip address. By creating a rough dictionary for pro repeal and against repeal using n-grams, we are able to classify 74.83% of comments into Repeal and NoRepeal. 25.17% of comments are uncategorized as the dictionaries are incomplete at this stage and needs to be more exhaustive.
+
+41.51% of comments were pro repeal and 58.71% of comments are against repeal. Astonishingly 31254 or 6.25% of comments were exactly this below:
+
+"in 2015, chairman tom wheelerâ's federal communications commission (fcc) imposed restrictive title ii, utility-style regulations under the guise of an â"open internet.â" not only have these regulations inhibited innovation in the internet ecosystem, they hurt taxpayers and consumers by expanding the regulatory reach of the fcc and limiting investment in internet infrastructure. we cannot allow this revolutionary tool to be bogged down with excessive government interference.\n \nit is past time for the fcc, an agency that is funded by american taxpayers, to free the internet of burdensome regulations. by rolling back the misguided 2015 regulations we can restore an unrestricted and truly open internet. i thank the commissioners for considering these comments during the reply period."
+
+Another 14871 or 2.97% people wrote this exact same comment below:
+
+""as a concerned taxpayer and consumer, i am writing to urge the fcc to set the internet free and remove the inappropriate, unnecessary and overly vast regulations currently holding back the full potential of the internet. due to the grip of the utility-style regulations imposed under the previous commission, taxpayers have been put at risk, the threat of new fees on consumer bills still looms large, investment in internet infrastructure has not realized its full potential, innovations have gone undeveloped and unrealized, and twenty years of the appropriate level of oversight of the internet has been reversed.\n\nwe must dial-back the poorly conceived application of title ii in the open internet order so that american taxpayers can benefit from an unrestrained and truly open internet that scales back the unlimited power of the government, protects consumers from new taxes and encourages future investment and endless innovations.""
+
+## Approach:
+
+This model will try to predict the probability of a fake comment and the first step is engineer variables and label the target variable. Since the data is textual, the target variable which will be a binary variable: FakeComment (Y/N) which can be engineered using survey results. Start up policy lab conducted a survey for multiple fake campaigns and estimated that 3.6 million comments were fake using extrapolation. This estimate can be used as the target variable.
+
+Next step would be to engineer variables to feed into the model. Variables that are possible include: Campaign, Prorepeal or AgainstRepeal, Email domain, Type of domain (Business/ Personal), IP addess, Count of words in comment, Comment Uniqueness Index, International address, US State, US City, Name Uniqueness Index and so on.
+
+After an initial bi-variate study, an XGBoost or other high performing complex model or an ensemble of models can be used to predict the probability of a comment being fake. The first cut model will be iterated to remove less predictive variables with the model being validated at each step for performance using Rank ordering algorithms and lift charts.
+
+With the final robust model, a repository of IDs with high probability (greater than threshold) of being stolen for fake comments can be built.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE)
+setwd("E:/Dhivya/FCC")
+fcc_500k <- read.csv("fcc_500ksample.csv")
+repeal_dictionary <- c("i strongly oppose", "strongly oppose", "oppose", "power grab", "fcc should repeal", "net neutrality order was the corrupt", "unprecedented increase in government control", "obama administration rammed through a massive scheme", "fcc to reverse obama's scheme", "overturn president Obama's order", "over-regulation", "before leaving office", "the current fcc regulation", "to the federal communications", "as a concerned taxpayer", "in 2015, chairman tom")
+norepeal_dictionary <- c("do not repeal", "don't repeal", "need net neutrality", "support existing net neutrality", "support net neutrality", "protect net neutrality", "in favor of strong net neutrality", "please do not reverse", "do not support repeal", "the fcc's open internet")
+library(stringr)
+fcc_500k$Message <- tolower(str_trim(fcc_500k$comment))
+fcc_500k$Repeal <-ifelse((grepl(paste(repeal_dictionary, collapse = "|"), fcc_500k$Message)),1,0)
+fcc_500k$NoRepeal <-ifelse((grepl(paste(norepeal_dictionary, collapse = "|"), fcc_500k$Message)),1,0)
+fcc_500k$Add <- fcc_500k$Repeal+ fcc_500k$NoRepeal
+fcc_500k$Repeat1 <- ifelse(grepl("in 2015, chairman tom", fcc_500k$Message),1,0)
+fcc_500k$Repeat2 <- ifelse(grepl("as a concerned taxpayer", fcc_500k$Message),1,0)
+fcc_500k$Campaign <- ifelse(grepl("i am in favor of strong", fcc_500k$Message),1,ifelse(grepl("the fcc's open internet", fcc_500k$Message),2,ifelse(grepl("to the federal communication",fcc_500k$Message),3,ifelse(grepl("in 2015, chairman tom",fcc_500k$Message),4,ifelse(grepl("the unprecendented regulation",fcc_500k$Message),5,0)))))
+```
+
+## Plot 1: This plot shows four comment campaigns where the exact comments with the exact wordings were repeated 170697, 37393, 2544 and 31254 times resp.
+
+```{r}
+## Taking only comments that are classified now
+take <- fcc_500k[fcc_500k$Campaign!=0,]
+take$Group <- ifelse(take$Campaign==1,"AgainstRepeal","ProRepeal")
+library(ggplot2)
+ggplot(take, aes(Campaign, fill=Group)) + geom_histogram() + ggtitle("Repeat Comment Occurances") + labs(x="CommentCampaign", y="Repeats")
+```
+
+## Plot 2: The Startup Policy Lab estimates are used to identify the target variable Fake (0/1), this is used to find the Fake rate for pro repeal and against repeal comments.
+```{r}
+fcc_500k$Fake <- ifelse(fcc_500k$campaign %in% c(34,16,33,3,37,4,6,7,31,53,11,32,9,5,2,8,55),1,0)
+fcc_500k$Group <- ifelse(fcc_500k$Repeal==1,"ProRepeal","AgainstRepeal")
+source("http://pcwww.liv.ac.uk/~william/R/crosstab.r")
+crosstab(fcc_500k, row.vars = "Group", col.vars = 'Fake', type="r")
+x <- data.frame(c("AgainstRepeal","ProRepeal"),c(15.02,92.11))
+colnames(x) <- c("Group","FakeRate")
+ggplot(x, aes(x=Group, y=FakeRate, fill=Group)) + geom_bar(stat="identity") + ggtitle("FakeRate in ProRepeal vs AgainstRepeal") + labs(x="Group", y="FakeRate") + geom_text(aes(label = FakeRate), position = position_stack(vjust = 0.5))
+```
